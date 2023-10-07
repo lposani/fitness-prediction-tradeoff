@@ -33,6 +33,5 @@ def visualize_inferred_real(real_deltafitness, inferred_deltafitness, family, mo
     plt.ylabel('$\Delta\mathcal{H}(i,a)$')
     spear, p = spearmanr(real_deltafitness, inferred_deltafitness)
     plt.title('%s   %s   $\\rho = %.4f$' % (family, model_title, spear))
-
     plt.tight_layout()
     plt.show()

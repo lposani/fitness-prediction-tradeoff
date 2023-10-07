@@ -4,7 +4,7 @@ import numpy as np
 fm = ['o', 's', '^', '+', '*']
 
 
-def focusing(family, model='ACEK', ds=None, K=0, differential_unseen=False, save=False, J0=0):
+def focusing(family, model='ACEK', ds=None, K=0, differential_unseen=False, save=False, J0=None, snr_threshold=None):
     distances = {
         'WW': np.arange(5, 30),
         'RNA-bind': np.arange(10, 81),
@@ -55,9 +55,10 @@ def focusing(family, model='ACEK', ds=None, K=0, differential_unseen=False, save
         print("[focusing]\t %s K=%u --- computing cutoff distance %.2f --- spear = %.2f, var = %.2f, SNR = %.1f" % (
             family, K, d, spearmans[i], variances[i], snrs[i]))
 
-    if J0:
-        visualize_focusing(family, model, K, ds=np.asarray(ds), spearmans=spearmans, Bs=Bs, variances=variances,
-                           snrs=snrs, mean_ds=mean_ds, J0=J0)
+
+    visualize_focusing(family, model, K, ds=np.asarray(ds), spearmans=spearmans, Bs=Bs, variances=variances,
+                       snrs=snrs, mean_ds=mean_ds, J0=J0, snr_threshold=snr_threshold)
+
     return ds, spearmans, Bs, variances, snrs, mean_ds
 
 
@@ -122,7 +123,7 @@ def focusing_performance(family, model, msa, W, d, save=False, K=0, plot=False, 
 
 # visualization
 
-def visualize_focusing(family, model, K, ds, spearmans, Bs, variances, snrs, mean_ds, J0, ax='none',
+def visualize_focusing(family, model, K, ds, spearmans, Bs, variances, snrs, mean_ds, J0=None, snr_threshold=None, ax='none',
                        differential_unseen=False):
     mkdir('../plots/focusing')
     folder = './plots/focusing/rw=%.2f_vc=%.2f_us=%.2f_%s' % (params['reweighting'], params['variance_cutoff'],
@@ -158,28 +159,35 @@ def visualize_focusing(family, model, K, ds, spearmans, Bs, variances, snrs, mea
             W = hard_cutoff_weights(msa, wt, d)
             p = inference.compute_weighted_averages(msa, W)
             p_prior[p_prior == 0] = p[p_prior == 0]
+    if J0 is not None:
+        bv_tradeoff = mean_ds * J0 + variances
+        max_predicted = ds[np.argmin(bv_tradeoff)]
+        axs[0].axvline([max_predicted], color='r', linestyle='--')
+        axs[1].plot(ds, bv_tradeoff, linestyle='-', marker='', color=pltcolors[3])
+        axs[1].text(ds[0] - 0.2, bv_tradeoff[0], '$\mu^2 + \\sigma^2 $', ha='right')
+        axs[1].plot(ds, mean_ds * J0, linestyle='-', marker='', color='k')
+        axs[1].set_ylabel('$\mu^2$ and $\sigma^2$')
+        axs[1].text(ds[0] - 0.2, mean_ds[0] * J0, '$\mu^2 = J_0 D$', ha='right')
+        pred_performance = spearmans[np.argmin(bv_tradeoff)]
 
-    bv_tradeoff = mean_ds * J0 + variances
-    max_predicted = ds[np.argmin(bv_tradeoff)]
+    if snr_threshold is not None:
+        max_predicted = ds[np.argmin(np.abs(snrs - snr_threshold))]
+        print(max_predicted)
+        pred_performance = spearmans[np.argmin(np.abs(snrs - snr_threshold))]
+        axs[0].axvline([max_predicted], color='r', linestyle='--')
+        axs[1].axhline([snr_threshold], color='b', linestyle='--', alpha=0.2)
+        axs[1].set_ylabel('$\sigma^2$ & SNR')
     max_real = ds[np.argmax(spearmans)]
-    pred_performance_snr = spearmans[np.argmin(np.abs(snrs - params['focusing_snr_cutoff']))]
-    max_snr = ds[np.argmin(np.abs(snrs - params['focusing_snr_cutoff']))]
 
     axs[0].axvline([max_real], color='k', linestyle='--')
-    axs[0].axvline([max_predicted], color='r', linestyle='--')
     sns.despine(ax=axs[0])
 
-    axs[1].set_ylabel('$\mu^2$ and $\sigma^2$')
-
     axs[1].plot(ds, variances, linestyle='-', marker='', color='k')
-    axs[1].plot(ds, mean_ds * J0, linestyle='-', marker='', color='k')
-    axs[1].plot(ds, bv_tradeoff, linestyle='-', marker='', color=pltcolors[3])
+    axs[1].plot(ds, snrs, linestyle='-', marker='', color='r')
     axs[1].text(ds[0] - 0.2, variances[0], '$\\sigma^2$', ha='right')
-    axs[1].text(ds[0] - 0.2, mean_ds[0] * J0, '$\mu^2 = J_0 D$', ha='right')
-    axs[1].text(ds[0] - 0.2, bv_tradeoff[0], '$\mu^2 + \\sigma^2 $', ha='right')
+    axs[1].text(ds[0] - 0.2, snrs[0], 'SNR', ha='right')
 
     # axs[1].axvline([max_real], color='k', linestyle='--')
-    axs[1].axvline([max_predicted], color='r', linestyle='--')
     sns.despine(ax=axs[1])
     # axs[1].legend(prop={'size': 8})
 
@@ -223,40 +231,39 @@ def visualize_focusing(family, model, K, ds, spearmans, Bs, variances, snrs, mea
         sns.despine()
 
     best_performance = np.max(spearmans)
-    pred_performance = spearmans[np.argmin(bv_tradeoff)]
     print(len(spearmans), len(snrs))
-    pred_performance_var = spearmans[np.argmin(np.abs(snrs - params['focusing_snr_cutoff']))]
-    best_B = np.sum(hard_cutoff_weights(msa, wt, ds[np.argmax(spearmans)]))
-    pred_B = np.sum(hard_cutoff_weights(msa, wt, ds[np.argmin(bv_tradeoff)]))
-
+    # pred_performance_var = spearmans[np.argmin(np.abs(snrs - snr_threshold))]
     from matplotlib import cm
-    f = plt.figure(figsize=(3.5, 3))
-    ax = f.add_subplot(111, projection='3d')
-    ax.view_init(30, -145)
-    zmin = np.min(bv_tradeoff) - 0.1
-    ax.set_zlim([zmin, np.max(bv_tradeoff) + 0.2])
-    ax.plot(mean_ds, variances, mean_ds * J0 + variances, linewidth=2, marker='', color=pltcolors[0])
-    ax.plot(mean_ds, variances, mean_ds * J0 + variances, linewidth=2, marker='.', linestyle='', color='k')
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]],
-            [J0 * mean_ds[np.argmin(bv_tradeoff)] + variances[np.argmin(bv_tradeoff)]], linestyle='', marker='.',
-            color='r')
-    ax.plot(mean_ds, variances, np.ones(len(variances)) * zmin, linewidth=2, marker='.', color='k', alpha=0.4)
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]], [zmin], linestyle='', marker='.',
-            color='r', alpha=0.6)
+    if J0 is not None:
+        best_B = np.sum(hard_cutoff_weights(msa, wt, ds[np.argmax(spearmans)]))
+        pred_B = np.sum(hard_cutoff_weights(msa, wt, ds[np.argmin(bv_tradeoff)]))
+        f = plt.figure(figsize=(3.5, 3))
+        ax = f.add_subplot(111, projection='3d')
+        ax.view_init(30, -145)
+        zmin = np.min(bv_tradeoff) - 0.1
+        ax.set_zlim([zmin, np.max(bv_tradeoff) + 0.2])
+        ax.plot(mean_ds, variances, mean_ds * J0 + variances, linewidth=2, marker='', color=pltcolors[0])
+        ax.plot(mean_ds, variances, mean_ds * J0 + variances, linewidth=2, marker='.', linestyle='', color='k')
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]],
+                [J0 * mean_ds[np.argmin(bv_tradeoff)] + variances[np.argmin(bv_tradeoff)]], linestyle='', marker='.',
+                color='r')
+        ax.plot(mean_ds, variances, np.ones(len(variances)) * zmin, linewidth=2, marker='.', color='k', alpha=0.4)
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]], [zmin], linestyle='', marker='.',
+                color='r', alpha=0.6)
 
-    ax.plot([mean_ds[0], mean_ds[0]], [variances[0], variances[0]], [zmin, bv_tradeoff[0]], linewidth=1, linestyle='--',
-            color='k', alpha=0.4)
-    ax.plot([mean_ds[-1], mean_ds[-1]], [variances[-1], variances[-1]], [zmin, bv_tradeoff[-1]], linewidth=1,
-            linestyle='--', color='k', alpha=0.4)
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)], mean_ds[np.argmin(bv_tradeoff)]],
-            [variances[np.argmin(bv_tradeoff)], variances[np.argmin(bv_tradeoff)]], [zmin, np.min(bv_tradeoff)],
-            linewidth=1, linestyle='--', color='r', alpha=0.6)
+        ax.plot([mean_ds[0], mean_ds[0]], [variances[0], variances[0]], [zmin, bv_tradeoff[0]], linewidth=1, linestyle='--',
+                color='k', alpha=0.4)
+        ax.plot([mean_ds[-1], mean_ds[-1]], [variances[-1], variances[-1]], [zmin, bv_tradeoff[-1]], linewidth=1,
+                linestyle='--', color='k', alpha=0.4)
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)], mean_ds[np.argmin(bv_tradeoff)]],
+                [variances[np.argmin(bv_tradeoff)], variances[np.argmin(bv_tradeoff)]], [zmin, np.min(bv_tradeoff)],
+                linewidth=1, linestyle='--', color='r', alpha=0.6)
 
-    ax.set_xlabel("$D$")
-    ax.set_ylabel("$\sigma^2$")
-    ax.set_zlabel("$J_0 D + \sigma^2$")
-    ax.set_zlim([np.min(bv_tradeoff) - 0.1, np.max(bv_tradeoff) + 0.05])
-    f.savefig('%s/focusing_%s_%s_K=%u_trajectory.pdf' % (folder, family, model, K))
+        ax.set_xlabel("$D$")
+        ax.set_ylabel("$\sigma^2$")
+        ax.set_zlabel("$J_0 D + \sigma^2$")
+        ax.set_zlim([np.min(bv_tradeoff) - 0.1, np.max(bv_tradeoff) + 0.05])
+        # f.savefig('%s/focusing_%s_%s_K=%u_trajectory.pdf' % (folder, family, model, K))
 
     f = plt.figure(figsize=(3.5, 3))
     ax = f.add_subplot(111, projection='3d')
@@ -264,31 +271,34 @@ def visualize_focusing(family, model, K, ds, spearmans, Bs, variances, snrs, mea
     zmin = np.min(spearmans) - 0.01
     ax.plot(mean_ds, variances, spearmans, linewidth=2, marker='', color=pltcolors[0])
     ax.plot(mean_ds, variances, spearmans, linewidth=2, marker='.', linestyle='', color='k')
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]],
-            [spearmans[np.argmin(bv_tradeoff)]], linestyle='', marker='.',
-            color='r')
+    if J0 is not None:
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]],
+                [spearmans[np.argmin(bv_tradeoff)]], linestyle='', marker='.',
+                color='r')
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]], [zmin], linestyle='',
+                marker='.',
+                color='r', alpha=0.6)
+        ax.plot([mean_ds[np.argmin(bv_tradeoff)], mean_ds[np.argmin(bv_tradeoff)]],
+                [variances[np.argmin(bv_tradeoff)], variances[np.argmin(bv_tradeoff)]],
+                [zmin, spearmans[np.argmin(bv_tradeoff)]],
+                linewidth=1, linestyle='--', color='r', alpha=0.6)
     ax.plot(mean_ds, variances, np.ones(len(variances)) * zmin, linewidth=2, marker='.', color='k', alpha=0.4)
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)]], [variances[np.argmin(bv_tradeoff)]], [zmin], linestyle='', marker='.',
-            color='r', alpha=0.6)
+
 
     ax.plot([mean_ds[0], mean_ds[0]], [variances[0], variances[0]], [zmin, spearmans[0]], linewidth=1, linestyle='--',
             color='k', alpha=0.4)
     ax.plot([mean_ds[-1], mean_ds[-1]], [variances[-1], variances[-1]], [zmin, spearmans[-1]], linewidth=1,
             linestyle='--', color='k', alpha=0.4)
-    ax.plot([mean_ds[np.argmin(bv_tradeoff)], mean_ds[np.argmin(bv_tradeoff)]],
-            [variances[np.argmin(bv_tradeoff)], variances[np.argmin(bv_tradeoff)]],
-            [zmin, spearmans[np.argmin(bv_tradeoff)]],
-            linewidth=1, linestyle='--', color='r', alpha=0.6)
 
     ax.set_xlabel("$D$")
     ax.set_ylabel("$\sigma^2$")
     ax.set_zlabel("$\\rho$")
     ax.set_zlim([zmin, np.max(spearmans) + 0.02])
-    f.savefig('%s/focusing_%s_%s_K=%u_spearman.pdf' % (folder, family, model, K))
+    # f.savefig('%s/focusing_%s_%s_K=%u_spearman.pdf' % (folder, family, model, K))
 
     def animate(i):
         ax.view_init(elev=10., azim=-3.14 / 4.)
         return f
 
-    return best_performance, pred_performance, pred_performance_var, best_B, pred_B
+    return best_performance, pred_performance
 

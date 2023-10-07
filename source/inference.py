@@ -45,8 +45,8 @@ def infer_potts_ACEC(msa, contacts, W, lambda_J='auto', save_path='none', gauge=
     K = len(contacts)
 
     if lambda_J == 'auto':
-        # lambda_J = 0.01 * 20 * K * 2. / N
-        lambda_J = 10.0
+        lambda_J = 0.01 * 20 * K * 2. / N
+        # lambda_J = 10.0
 
     # build adjacency contacts matrix and compute selected correlations
     C = np.zeros((N, N))

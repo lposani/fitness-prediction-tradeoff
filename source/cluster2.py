@@ -98,7 +98,7 @@ def solve_cluster2_ij(pi, pj, P, lambda_h, lambda_J):
 
     # minimize!
     # t0 = time.time()
-    res = minimize(f, x0, method='BFGS', jac=g, options = {'disp': False, 'gtol' : 0.0005})
+    res = minimize(f, x0, method='BFGS', jac=g, options={'disp': False, 'gtol' : 0.0005})
     # print '==========', time.time() - t0
     hi = res.x[:qi]
     hj = res.x[qi:qi+qj]
@@ -120,8 +120,8 @@ def solve_cluster2(av, corr, contacts, lambda_h, lambda_J, gauge='dissensus', p_
     #     h[i] = h_sol
     #     h_ind[i] = h_sol
 
-    h = np.zeros((N,A))
-    h_ind = np.zeros((N,A))
+    h = np.zeros((N, A))
+    h_ind = np.zeros((N, A))
 
     for i in range(N):
         vi, gi = gauge_vector(av[i], gauge=gauge)

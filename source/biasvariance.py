@@ -156,16 +156,23 @@ def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax=
         contacts_type = 'x'
         contacts = []
 
-    cache_name = './data/%s/subsampling/%s_n=%u_us=%.1f_ct=%s_K=%u_rw=%.2f_vt=%.2f.dat' % (
+    cache_name = './data/%s/subsampling/%s_n=%u_us=%.1f_ct=%s_K=%u_rw=%.2f_vt=%.2f_Bs=%u-%u.dat' % (
         family, model, niter, params['unseen_pseudocount'], contacts_type, K, params['reweighting'],
-        params['variance_cutoff'])
+        params['variance_cutoff'], Bs[0], Bs[-1])
     print(cache_name)
     if os.path.exists(cache_name):
-        mean_Bs, mean_spearmans, mean_variances, mean_distances = pickle.load(open(cache_name, 'rb'))
+        msa_Bs, spearmans, variances, distances = pickle.load(open(cache_name, 'rb'))
     else:
         msa = read_MSA(family)
         (B, N) = msa.shape
-        if B < 20000 and plot == True:
+        if B < 20000 and plot:
+            def main_distance_matrix(msa):
+                (B, N) = np.shape(msa)
+                D = np.zeros((B, B))
+                for i, s in enumerate(msa):
+                    D[i] = np.sum(s != msa, 1) / float(N)
+                return D
+
             main_distance_matrix = main_distance_matrix(msa)
             mdm_flag = True
         else:
@@ -182,12 +189,13 @@ def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax=
                     mdm_flag=mdm_flag,
                     main_distance_matrix=main_distance_matrix, )
 
-        mask = (np.nanmean(variances, 2).flatten() < params['max_variance_scaling'][model])
-        mean_spearmans = np.nanmean(spearmans, 2).flatten()[mask]
-        mean_distances = np.nanmean(distances, 2).flatten()[mask]
-        mean_variances = np.nanmean(variances, 2).flatten()[mask]
-        mean_Bs = np.nanmean(msa_Bs, 2).flatten()[mask]
-        pickle.dump([mean_Bs, mean_spearmans, mean_variances, mean_distances], open(cache_name, 'wb'))
+        pickle.dump([msa_Bs, spearmans, variances, distances], open(cache_name, 'wb'))
+
+    mask = (np.nanmean(variances, 2).flatten() < params['max_variance_scaling'][model])
+    mean_spearmans = np.nanmean(spearmans, 2).flatten()[mask]
+    mean_distances = np.nanmean(distances, 2).flatten()[mask]
+    mean_variances = np.nanmean(variances, 2).flatten()[mask]
+    mean_Bs = np.nanmean(msa_Bs, 2).flatten()[mask]
 
     if plot:
         J0, J0_std = visualize_scaling(mean_spearmans, mean_variances, mean_distances, mean_Bs, family=family,
@@ -412,7 +420,7 @@ def Bs_family(family, model='ACEK'):
                         [800, 1200, 1600]])
     elif 'ACEK' in model:
         Bs = np.hstack(
-            [[100, 150, 200, 250], np.asarray((1. / np.linspace(1. / 300, 1. / (10000), 8)), dtype=int)[:-1]])
+            [[20, 40, 80, 160], np.asarray((1. / np.linspace(1. / 300, 1. / (10000), 8)), dtype=int)[:-1]])
 
     Bs = Bs[Bs < B]
     Ds = np.arange(params['dmin'], params['dmax'], 0.025)
@@ -448,6 +456,10 @@ def find_best_J0(spearmans, variances, distances, interval=None, finesse=10000):
 
         best_fit = np.mean(alphas[ss == np.min(ss)])
         interval_alphas = alphas[np.abs(ss) > 0.99 * np.abs(np.min(ss))]
+    plt.figure()
+    plt.plot(alphas, ss)
+    plt.xlabel('J0')
+    plt.ylabel('Spearman Corr')
 
     print(best_fit, [np.nanmin(interval_alphas), np.nanmax(interval_alphas)])
 

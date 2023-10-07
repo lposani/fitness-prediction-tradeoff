@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 
 family = 'RNA-bind'
 
-# Using pre-computed J0 to compute the predicted cutoff.
-J0 = 0.076
+# choose signal-to-noise ratio threshold to predict the optimal focusing
+snr_threshold = 3.0
 
 # Focusing results are loaded from a cached run, use save=False to recompute them from scratch
-ds, spearmans, Bs, variances, snrs, mean_ds = focusing(family=family, model='IND', K=0, save=True, J0=J0)
+ds, spearmans, Bs, variances, snrs, mean_ds = focusing(family=family, model='IND',
+                                                       save=True, snr_threshold=snr_threshold)
 plt.show()
