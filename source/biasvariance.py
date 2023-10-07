@@ -130,7 +130,7 @@ def scaling_descriptors(family, model, B, dist, niter, contacts=None, mdm_flag=F
     return spearmans, distances, variances, msa_Bs
 
 
-def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax='auto', niter=0):
+def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax='auto', niter=0, cache=True):
     if niter == 0:
         niter = params['scaling_niter']
     spearmans = np.zeros((len(Bs), len(Ds), niter))
@@ -160,7 +160,7 @@ def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax=
         family, model, niter, params['unseen_pseudocount'], contacts_type, K, params['reweighting'],
         params['variance_cutoff'], Bs[0], Bs[-1])
     print(cache_name)
-    if os.path.exists(cache_name):
+    if os.path.exists(cache_name) and cache:
         msa_Bs, spearmans, variances, distances = pickle.load(open(cache_name, 'rb'))
     else:
         msa = read_MSA(family)
@@ -188,8 +188,8 @@ def scaling_bias_variance(family, Ds, Bs, model='ACEK', K=0, plot=True, plot_ax=
                     contacts=contacts,
                     mdm_flag=mdm_flag,
                     main_distance_matrix=main_distance_matrix, )
-
-        pickle.dump([msa_Bs, spearmans, variances, distances], open(cache_name, 'wb'))
+        if cache:
+            pickle.dump([msa_Bs, spearmans, variances, distances], open(cache_name, 'wb'))
 
     mask = (np.nanmean(variances, 2).flatten() < params['max_variance_scaling'][model])
     mean_spearmans = np.nanmean(spearmans, 2).flatten()[mask]

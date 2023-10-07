@@ -58,7 +58,7 @@ def infer_potts_ACEC(msa, contacts, W, lambda_J='auto', save_path='none', gauge=
     B = float(len(msa))
     # solve 2-cluster approximation
     t0 = time.time()
-    (h, J) = solve_cluster2(av, corr, contacts, lambda_h=0.1 / B, lambda_J=lambda_J / B, save_path=save_path)
+    (h, J) = solve_cluster2(av, corr, contacts, lambda_h=1. / B, lambda_J=lambda_J / B, save_path=save_path)
     if params['timing']:
         print("[timing]\t ACEK minimization: %.4f" % (time.time() - t0))
     if len(p_prior):
